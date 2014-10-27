@@ -60,6 +60,7 @@ public class DeliberativeTemplate implements DeliberativeBehavior {
 	Algorithm algorithm;
 	Heuristic heuristic;
 	
+	/* */
 	/* class for search algorithms */
 	class Node implements Comparable<Node>{
 		private int[] state;
@@ -403,7 +404,7 @@ public class DeliberativeTemplate implements DeliberativeBehavior {
 		curNode.stateInfo.cost += futureCost;
 	}
 	
-	double computeMSTLength(boolean[] isCityAlive) {
+	private double computeMSTLength(boolean[] isCityAlive) {
 		int cur = -1;
 		double dist[] = new double[isCityAlive.length];
 		int nCityAlive = 0;
