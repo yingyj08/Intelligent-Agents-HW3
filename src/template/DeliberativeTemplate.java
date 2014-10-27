@@ -89,9 +89,15 @@ public class DeliberativeTemplate implements DeliberativeBehavior {
 			plan = naivePlan(vehicle, tasks);
 			break;
 		case ASTAR:
+			try {
+				plan = astarPlan(vehicle, tasks);
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
+			break;
 		case BFS:
 			try {
-				plan = genericPlan(vehicle, tasks, algorithm);
+				plan = bfsPlan(vehicle, tasks);
 			} catch (Exception e) {
 				e.printStackTrace();
 			}
@@ -101,7 +107,8 @@ public class DeliberativeTemplate implements DeliberativeBehavior {
 		}		
 		return plan;
 	}
-	private Plan genericPlan(Vehicle vehicle, TaskSet tasks, Algorithm algorithm ) throws Exception{
+	
+	private Plan astarPlan(Vehicle vehicle, TaskSet tasks ) throws Exception{
 		City current =  vehicle.getCurrentCity();
 		Plan plan = new Plan(current);
 		//state[0]: agent position
@@ -124,10 +131,108 @@ public class DeliberativeTemplate implements DeliberativeBehavior {
 				return 0;	
 			}
 		});
-		//should be queue, but for generality, you know
-		LinkedList<Node> pending = new LinkedList<Node>();
+		TreeMap<int[], StateInfo> pending = new TreeMap<int[], StateInfo>(new Comparator<int[]>(){
+			@Override
+			public int compare(int[] p, int[] q){
+				for(int i = 0; i < p.length; i++)
+					if(p[i] < q[i]) 
+						return -1;
+					else if(p[i] > q[i])
+						return 1;
+				return 0;	
+			}
+		});
 		Node initNode = new Node(state, new StateInfo());
-		initNode.stateInfo.cost = computeFutureCost(state, algorithm);
+		initNode.stateInfo.cost = computeFutureCost(state, Algorithm.ASTAR);
+		pending.put(initNode.state, initNode.stateInfo);
+		Node finalStateNode = null;
+		
+		//TODO test
+		int c = 0, c2 = 0;
+		
+		while(!pending.isEmpty()){
+			c2++;
+			if (finalStateNode != null) {
+				break;
+			}
+			Node curNode = new Node();
+			curNode.stateInfo = new StateInfo();
+			curNode.stateInfo.cost = Double.MAX_VALUE;
+			for (Map.Entry<int[], StateInfo> curEntry : pending.entrySet()) {
+				if (curNode.stateInfo.cost > curEntry.getValue().cost) {
+					curNode.state = curEntry.getKey();
+					curNode.stateInfo = curEntry.getValue();
+				}
+			}
+			pending.remove(curNode.state);
+			if(isGoalState(curNode.state)){
+				if(finalStateNode == null)
+					finalStateNode = curNode;
+				else if(finalStateNode.stateInfo.cost>curNode.stateInfo.cost)
+					finalStateNode = curNode;
+			}
+			if(visited.containsKey(curNode.state) 
+					&& visited.get(curNode.state).cost <= curNode.stateInfo.cost){
+				continue;
+			}
+			List<Node> sucs = findAllSuccessors(curNode, visited, Algorithm.ASTAR);
+//			Collections.sort(sucs, new Comparator<Node>(){
+//				@Override
+//				public int compare(Node a, Node b){
+//					if(a.stateInfo.cost<b.stateInfo.cost)
+//						return -1;
+//					else if(a.stateInfo.cost == b.stateInfo.cost)
+//						return 0;
+//					return 1;
+//				}
+//			});
+//			merge(pending, sucs);
+			for (Node suc : sucs) {
+				if(!pending.containsKey(suc.state) 
+						|| (pending.get(suc.state)).cost > suc.stateInfo.cost)
+					pending.put(suc.state, suc.stateInfo);
+			}
+			visited.put(curNode.state, curNode.stateInfo);
+			c++;
+		}
+		
+		System.out.println(c);
+		System.out.println(c2);
+		System.out.println(pending.size());
+		
+		if(finalStateNode == null)
+			throw new Exception("Mission impossible!");
+		appendAllActions(plan, finalStateNode, visited);
+		return plan;
+	}
+	
+	private Plan bfsPlan(Vehicle vehicle, TaskSet tasks) throws Exception{
+		City current =  vehicle.getCurrentCity();
+		Plan plan = new Plan(current);
+		//state[0]: agent position
+		//state[1 -- nTasks]: TaskState
+		int[]  state = new int[nTasks+1+nCarried];
+		state[0] = current.id;
+		for(int i = 1; i <= nTasks; i++)
+			state[i] = WAITING;
+		for(int i = nTasks+1; i < state.length; i++)
+			state[i] = PICKEDUP;
+		
+		TreeMap<int[],StateInfo> visited = new TreeMap<int[], StateInfo>(new Comparator<int[]>(){
+			@Override
+			public int compare(int[] p, int[] q){
+				for(int i = 0; i < p.length; i++)
+					if(p[i] < q[i]) 
+						return -1;
+					else if(p[i] > q[i])
+						return 1;
+				return 0;	
+			}
+		});
+		
+		Queue<Node> pending = new LinkedList<Node>();
+		Node initNode = new Node(state, new StateInfo());
+		initNode.stateInfo.cost = 0.0;
 		pending.add(initNode);
 		Node finalStateNode = null;
 		
@@ -136,9 +241,6 @@ public class DeliberativeTemplate implements DeliberativeBehavior {
 		
 		while(!pending.isEmpty()){
 			c2++;
-			if (algorithm.equals(Algorithm.ASTAR) && finalStateNode != null) {
-				break;
-			}
 			Node curNode = pending.remove();
 			if(isGoalState(curNode.state)){
 				if(finalStateNode == null)
@@ -150,27 +252,8 @@ public class DeliberativeTemplate implements DeliberativeBehavior {
 					&& visited.get(curNode.state).cost <= curNode.stateInfo.cost){
 				continue;
 			}
-			List<Node> sucs = findAllSuccessors(curNode, visited, algorithm);
-			switch(algorithm){
-			case BFS:
-				pending.addAll(sucs);
-				break;
-			case ASTAR:
-				Collections.sort(sucs, new Comparator<Node>(){
-					@Override
-					public int compare(Node a, Node b){
-						if(a.stateInfo.cost<b.stateInfo.cost)
-							return -1;
-						else if(a.stateInfo.cost == b.stateInfo.cost)
-							return 0;
-						return 1;
-					}
-				});
-				merge(pending, sucs);
-				break;
-			default:
-				throw new AssertionError("Should not happen.");
-			}
+			List<Node> sucs = findAllSuccessors(curNode, visited, Algorithm.BFS);
+			pending.addAll(sucs);
 			visited.put(curNode.state, curNode.stateInfo);
 			c++;
 		}
