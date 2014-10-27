@@ -2,6 +2,7 @@ package template;
 
 /* import table */
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -60,7 +61,31 @@ public class DeliberativeTemplate implements DeliberativeBehavior {
 	Algorithm algorithm;
 	Heuristic heuristic;
 	
-	/* */
+	/* for MST heuristic */
+	HashMap<MSTState, Double> mstTable;
+	class MSTState{
+		private boolean isCityAlive[];
+		MSTState() {
+			isCityAlive = new boolean[cityList.size()];
+		}
+		@Override
+		public boolean equals(Object other) {
+		    if (other == null) return false;
+		    if (other == this) return true;
+		    if (!(other instanceof MSTState))return false;
+		    MSTState otherNode = (MSTState)other;
+		    for (int i = 0; i < this.isCityAlive.length; ++i) {
+		    	if (this.isCityAlive[i] != otherNode.isCityAlive[i])
+		    		return false;
+		    }
+			return true;
+		}
+		@Override
+		public int hashCode() {
+			return Arrays.hashCode(isCityAlive);
+		}
+	}
+	
 	/* class for search algorithms */
 	class Node implements Comparable<Node>{
 		private int[] state;
@@ -179,6 +204,7 @@ public class DeliberativeTemplate implements DeliberativeBehavior {
 		for(Task task: vehicle.getCurrentTasks())
 			taskList[i++] = task;
 		initDiameterList();
+		mstTable = new HashMap<MSTState, Double>();
 		
 		// Compute the plan with the selected algorithm.
 		switch (algorithm) {
@@ -266,7 +292,7 @@ public class DeliberativeTemplate implements DeliberativeBehavior {
 		pending.add(initNode);
 		Node finalStateNode = null;
 		
-		//TODO test
+		// count for number of loops
 		int c = 0, c2 = 0;
 		
 		while(!pending.isEmpty()){
@@ -301,6 +327,7 @@ public class DeliberativeTemplate implements DeliberativeBehavior {
 		System.out.println(c2);
 		System.out.println(pending.size());
 		System.out.println(visited.size());
+		//System.out.println(mstTable.size());
 		
 		if(finalStateNode == null)
 			throw new Exception("Mission impossible!");
@@ -327,7 +354,7 @@ public class DeliberativeTemplate implements DeliberativeBehavior {
 		pending.add(initNode);
 		Node finalStateNode = null;
 		
-		//TODO test
+		// count for number of loops
 		int c = 0, c2 = 0;
 		
 		while(!pending.isEmpty()){
@@ -365,16 +392,16 @@ public class DeliberativeTemplate implements DeliberativeBehavior {
 	
 	private void computeFutureCost(Node curNode) {
 		double futureCost = 0.0;
-		boolean isCityAlive[] = new boolean[cityList.size()];
+		MSTState mst = new MSTState();
 		for(int i = 1; i < curNode.state.length; i++){
 			if(curNode.state[i] == WAITING){
-				isCityAlive[taskList[i-1].pickupCity.id] = true;
-				isCityAlive[taskList[i-1].deliveryCity.id] = true;
+				mst.isCityAlive[taskList[i-1].pickupCity.id] = true;
+				mst.isCityAlive[taskList[i-1].deliveryCity.id] = true;
 				futureCost = Math.max(futureCost, 
 						costPerKm*(taskList[i-1].pathLength()+
 								cityList.get(curNode.state[0]).distanceTo(taskList[i-1].pickupCity)));
 			}else if(curNode.state[i] == PICKEDUP){
-				isCityAlive[taskList[i-1].deliveryCity.id] = true;
+				mst.isCityAlive[taskList[i-1].deliveryCity.id] = true;
 				futureCost = Math.max(futureCost, 
 						costPerKm*cityList.get(curNode.state[0]).distanceTo(taskList[i-1].deliveryCity));
 			}
@@ -382,7 +409,7 @@ public class DeliberativeTemplate implements DeliberativeBehavior {
 		if (heuristic != Heuristic.BASIC) {
 			int diaId = curNode.stateInfo.curDiaId;
 			while (diaId < diameterList.size()) {
-				if (isCityAlive[diameterList.get(diaId).x] && isCityAlive[diameterList.get(diaId).y]) {
+				if (mst.isCityAlive[diameterList.get(diaId).x] && mst.isCityAlive[diameterList.get(diaId).y]) {
 					double diaCost = diameterList.get(diaId).distance
 							+ Math.min(cityList.get(diameterList.get(diaId).x).distanceTo(cityList.get(curNode.state[0])),
 									cityList.get(diameterList.get(diaId).y).distanceTo(cityList.get(curNode.state[0])));
@@ -396,26 +423,31 @@ public class DeliberativeTemplate implements DeliberativeBehavior {
 		}
 		
 		if (heuristic == Heuristic.MST) {
-			isCityAlive[curNode.state[0]] = true;
-			futureCost = Math.max(futureCost, costPerKm * computeMSTLength(isCityAlive));
+			mst.isCityAlive[curNode.state[0]] = true;
+			futureCost = Math.max(futureCost, costPerKm * computeMSTLength(mst));
 		}
 		
 		//futureCost = 0.0; // uncomment this will be Dijkstra
 		curNode.stateInfo.cost += futureCost;
 	}
 	
-	private double computeMSTLength(boolean[] isCityAlive) {
+	private double computeMSTLength(MSTState mst) {
+		if (mstTable.containsKey(mst)) {
+			return mstTable.get(mst);
+		}
+		boolean remainCities[] = new boolean[cityList.size()];
+		System.arraycopy(mst.isCityAlive, 0, remainCities, 0, mst.isCityAlive.length);
 		int cur = -1;
-		double dist[] = new double[isCityAlive.length];
+		double dist[] = new double[mst.isCityAlive.length];
 		int nCityAlive = 0;
 		double treeLen = 0;
 		int next = 0;
 		double nextDist = Double.MAX_VALUE;
-		for (int i = 0; i < isCityAlive.length; ++i) {
-			if (isCityAlive[i]) {
+		for (int i = 0; i < remainCities.length; ++i) {
+			if (remainCities[i]) {
 				if (cur == -1) {
 					cur = i;
-					isCityAlive[i] = false;
+					remainCities[i] = false;
 				} else {
 					nCityAlive++;
 					dist[i] = cityList.get(cur).distanceTo(cityList.get(i));
@@ -425,15 +457,14 @@ public class DeliberativeTemplate implements DeliberativeBehavior {
 					}
 				}
 			}
-		}
-		
+		}		
 		cur = next;
 		nCityAlive--;
 		while (nCityAlive > 0) {
-			isCityAlive[next] = false;
+			remainCities[next] = false;
 			nextDist = Double.MAX_VALUE;
-			for (int i = 0; i < isCityAlive.length; i++) {
-				if (isCityAlive[i]) {
+			for (int i = 0; i < remainCities.length; i++) {
+				if (remainCities[i]) {
 					dist[i] = Math.min(dist[i], cityList.get(cur).distanceTo(cityList.get(i)));
 					if (dist[i] < nextDist) {
 						next = i;
@@ -445,6 +476,7 @@ public class DeliberativeTemplate implements DeliberativeBehavior {
 			cur = next;
 			nCityAlive--;
 		}
+		mstTable.put(mst, treeLen);
 		return treeLen;
 	}
 	
