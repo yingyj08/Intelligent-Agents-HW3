@@ -170,14 +170,18 @@ public class DeliberativeTemplate implements DeliberativeBehavior {
 	
 	@Override
 	public Plan plan(Vehicle vehicle, TaskSet tasks) {
+		//calculating time
+		long start = System.currentTimeMillis();
 		Plan plan = null;
 		nCarried = vehicle.getCurrentTasks().size(); //update the #carried tasks
 		nTasks = tasks.size();//update #left-over tasks
+		//update taskList: remaining tasks + tasks on vehicle
 		taskList = new Task[nTasks+nCarried];
 		tasks.toArray(taskList);
 		int i = nTasks;
 		for(Task task: vehicle.getCurrentTasks())
 			taskList[i++] = task;
+		
 		initDiameterList();
 		
 		// Compute the plan with the selected algorithm.
@@ -201,7 +205,10 @@ public class DeliberativeTemplate implements DeliberativeBehavior {
 			break;
 		default:
 			throw new AssertionError("Should not happen.");
-		}		
+		}
+		//priting running time
+		System.out.print("Time: ");
+		System.out.println(System.currentTimeMillis()-start);
 		return plan;
 	}
 	
@@ -248,12 +255,12 @@ public class DeliberativeTemplate implements DeliberativeBehavior {
 	}
 	
 	private Plan astarPlan(Vehicle vehicle, TaskSet tasks ) throws Exception{
-		City current =  vehicle.getCurrentCity();
-		Plan plan = new Plan(current);
+		City currentCity =  vehicle.getCurrentCity();
+		Plan plan = new Plan(currentCity);
 		//state[0]: agent position
 		//state[1 -- nTasks]: TaskState
 		int[]  state = new int[nTasks+1+nCarried];
-		state[0] = current.id;
+		state[0] = currentCity.id;
 		for(int i = 1; i <= nTasks; i++)
 			state[i] = WAITING;
 		for(int i = nTasks+1; i < state.length; i++)
@@ -485,6 +492,7 @@ public class DeliberativeTemplate implements DeliberativeBehavior {
 		return sucs;
 	}
 	
+	//after achieving goal, traceback all actions and append them to plan
 	private void appendAllActions(Plan plan, Node finalStateNode, HashMap<Node, StateInfo>visited){
 		List<Action> actionList = new ArrayList<Action>();
 		int[] curState = new int[finalStateNode.state.length];
@@ -513,6 +521,7 @@ public class DeliberativeTemplate implements DeliberativeBehavior {
 			plan.append(act);
 	}
 	
+	//check whether state is initial state
 	private boolean isInitState(int[] state){
 		for(int i = 1; i <= nTasks; i++)
 			if(state[i] != WAITING)
@@ -522,6 +531,8 @@ public class DeliberativeTemplate implements DeliberativeBehavior {
 				return false;
 		return true;
 	}
+	
+	//check whether state is goalstate
 	private boolean isGoalState(int[] state){
 		for(int i = 1; i < state.length; i++)
 			if(state[i] != DELIVERED)
@@ -529,6 +540,7 @@ public class DeliberativeTemplate implements DeliberativeBehavior {
 		return true;
 	}
 	
+	//default code provided by TAs==================================
 	private Plan naivePlan(Vehicle vehicle, TaskSet tasks) {
 		City current = vehicle.getCurrentCity();
 		Plan plan = new Plan(current);
