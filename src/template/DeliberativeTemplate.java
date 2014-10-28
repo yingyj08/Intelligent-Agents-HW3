@@ -233,7 +233,7 @@ public class DeliberativeTemplate implements DeliberativeBehavior {
 			throw new AssertionError("Should not happen.");
 		}
 		//priting running time
-		System.out.print("Time: ");
+		System.out.print("Time for computation: ");
 		System.out.println(System.currentTimeMillis()-start);
 		return plan;
 	}
@@ -326,15 +326,25 @@ public class DeliberativeTemplate implements DeliberativeBehavior {
 					pending.add(suc);
 			}
 			visited.put(curNode, curNode.stateInfo);
-			//System.out.println(curNode.stateInfo.cost + " " + c + " " + pending.size());
+			if ((c2 & 131071) == 0) {
+				System.out.print("   current cost: " + curNode.stateInfo.cost);
+				System.out.println("  loop count: " + c2);
+			}
 			c++;
 		}
 		
-		System.out.println(c);
-		System.out.println(c2);
-		System.out.println(pending.size());
-		System.out.println(visited.size());
+		
+		System.out.println("pending size: " + pending.size());
+		System.out.println("visited size: " + visited.size());
+		System.out.println("states searched: " + c);
+		System.out.println("loops finished: " + c2);
 		//System.out.println(mstTable.size());
+//		HashMap<Node, StateInfo> test = new HashMap<Node, StateInfo>();
+//		for (Node n : pending) {
+//			if (!visited.containsKey(n))
+//				test.put(n, n.stateInfo);
+//		}
+//		System.out.println(test.size());
 		
 		if(finalStateNode == null)
 			throw new Exception("Mission impossible!");
@@ -384,12 +394,15 @@ public class DeliberativeTemplate implements DeliberativeBehavior {
 					pending.add(suc);
 			}
 			visited.put(curNode, curNode.stateInfo);
+			if ((c2 & 131071) == 0) {
+				System.out.println("  loop count: " + c2);
+			}
 			c++;
 		}	
-		System.out.println(c);
-		System.out.println(c2);
-		System.out.println(pending.size());
-		System.out.println(visited.size());
+		System.out.println("pending size: " + pending.size());
+		System.out.println("states searched: " + c);
+		System.out.println("loops finished: " + c2);
+		System.out.println("visited size: " + visited.size());
 		
 		if(finalStateNode == null)
 			throw new Exception("Mission impossible!");
