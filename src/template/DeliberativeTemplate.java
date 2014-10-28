@@ -3,6 +3,7 @@ package template;
 /* import table */
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.BitSet;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -87,12 +88,16 @@ public class DeliberativeTemplate implements DeliberativeBehavior {
 	}
 	
 	/* class for search algorithms */
+	BitSet goalState;
+	BitSet initState;
 	class Node implements Comparable<Node>{
-		private int[] state;
+		private int curCityId;
+		private BitSet taskState;
 		private StateInfo stateInfo;
 		private Node(){stateInfo = new StateInfo();}
-		private Node(int[] state, StateInfo stateInfo){
-			this.state = state;
+		private Node(int curCityId, BitSet taskState, StateInfo stateInfo){
+			this.curCityId = curCityId;
+			this.taskState = taskState;
 			this.stateInfo = stateInfo;
 		}
 		@Override
@@ -109,20 +114,17 @@ public class DeliberativeTemplate implements DeliberativeBehavior {
 		    if (other == this) return true;
 		    if (!(other instanceof Node))return false;
 		    Node otherNode = (Node)other;
-		    for (int i = 0; i < this.state.length; ++i) {
-		    	if (this.state[i] != otherNode.state[i])
-		    		return false;
-		    }
+		    if (this.curCityId != otherNode.curCityId)
+		    	return false;
+		    if (!this.taskState.equals(otherNode.taskState))
+		    	return false;
 			return true;
 		}
 		@Override
 		public int hashCode() {
 			//JSHash
-            int hash = 1315423911;
-            for (int i = 0; i < state.length; i++) {
-                    hash ^= ((hash << 5) + state[i] + (hash >> 2));
-            }
-
+            int hash = 1315423911 ^ taskState.hashCode();
+            hash ^= ((hash << 5) + curCityId + (hash >> 2));
             return hash;
 		}
 	}
@@ -285,23 +287,22 @@ public class DeliberativeTemplate implements DeliberativeBehavior {
 		Plan plan = new Plan(currentCity);
 		//state[0]: agent position
 		//state[1 -- nTasks]: TaskState
-		int[]  state = new int[nTasks+1+nCarried];
-		state[0] = currentCity.id;
-		for(int i = 1; i <= nTasks; i++)
-			state[i] = WAITING;
-		for(int i = nTasks+1; i < state.length; i++)
-			state[i] = PICKEDUP;
+		
+		BitSet taskState = new BitSet(2*(nTasks + nCarried));
+		for(int i = nTasks; i < nTasks + nCarried; i++)
+			taskState.set(2*i, true);
+		initState = (BitSet) taskState.clone();
+		goalState = new BitSet(2*(nTasks + nCarried));
+		goalState.set(0, 2*(nTasks + nCarried));
 		
 		HashMap<Node, StateInfo> visited = new HashMap<Node, StateInfo>();
 		PriorityQueue<Node> pending = new PriorityQueue<Node>();
-		Node initNode = new Node(state, new StateInfo());
+		Node initNode = new Node(currentCity.id, taskState, new StateInfo());
 		computeFutureCost(initNode);
 		pending.add(initNode);
 		Node finalStateNode = null;
 		
-		// count for number of loops
-		int c = 0, c2 = 0;
-		
+		int c = 0, c2 = 0; // count for loops
 		while(!pending.isEmpty()){
 			c2++;
 			if (finalStateNode != null) {
@@ -309,7 +310,7 @@ public class DeliberativeTemplate implements DeliberativeBehavior {
 			}
 			Node curNode = new Node();
 			curNode = pending.poll();
-			if(isGoalState(curNode.state)){
+			if(goalState.equals(curNode.taskState)){
 				if(finalStateNode == null)
 					finalStateNode = curNode;
 				else if(finalStateNode.stateInfo.cost>curNode.stateInfo.cost) 
@@ -329,6 +330,8 @@ public class DeliberativeTemplate implements DeliberativeBehavior {
 			if ((c2 & 131071) == 0) {
 				System.out.print("   current cost: " + curNode.stateInfo.cost);
 				System.out.println("  loop count: " + c2);
+				if (nTasks > 15 && (c2 >> 17) > 10)
+					System.gc();
 			}
 			c++;
 		}
@@ -353,20 +356,20 @@ public class DeliberativeTemplate implements DeliberativeBehavior {
 	}
 	
 	private Plan bfsPlan(Vehicle vehicle, TaskSet tasks) throws Exception{
-		City current =  vehicle.getCurrentCity();
-		Plan plan = new Plan(current);
+		City currentCity =  vehicle.getCurrentCity();
+		Plan plan = new Plan(currentCity);
 		//state[0]: agent position
 		//state[1 -- nTasks]: TaskState
-		int[]  state = new int[nTasks+1+nCarried];
-		state[0] = current.id;
-		for(int i = 1; i <= nTasks; i++)
-			state[i] = WAITING;
-		for(int i = nTasks+1; i < state.length; i++)
-			state[i] = PICKEDUP;
+		BitSet taskState = new BitSet(2*(nTasks + nCarried));
+		for(int i = nTasks; i < nTasks + nCarried; i++)
+			taskState.set(2*i, true);
+		initState = (BitSet) taskState.clone();
+		goalState = new BitSet(2*(nTasks + nCarried));
+		goalState.set(0, 2*(nTasks + nCarried));
 		
 		HashMap<Node,StateInfo> visited = new HashMap<Node, StateInfo>();
 		Queue<Node> pending = new LinkedList<Node>();
-		Node initNode = new Node(state, new StateInfo());
+		Node initNode = new Node(currentCity.id, taskState, new StateInfo());
 		initNode.stateInfo.cost = 0.0;
 		pending.add(initNode);
 		Node finalStateNode = null;
@@ -377,7 +380,7 @@ public class DeliberativeTemplate implements DeliberativeBehavior {
 		while(!pending.isEmpty()){
 			c2++;
 			Node curNode = pending.remove();
-			if(isGoalState(curNode.state)){
+			if(goalState.equals(curNode.taskState)){
 				if(finalStateNode == null)
 					finalStateNode = curNode;
 				else if(finalStateNode.stateInfo.cost>curNode.stateInfo.cost)
@@ -413,17 +416,17 @@ public class DeliberativeTemplate implements DeliberativeBehavior {
 	private void computeFutureCost(Node curNode) {
 		double futureCost = 0.0;
 		MSTState mst = new MSTState();
-		for(int i = 1; i < curNode.state.length; i++){
-			if(curNode.state[i] == WAITING){
-				mst.isCityAlive[taskList[i-1].pickupCity.id] = true;
-				mst.isCityAlive[taskList[i-1].deliveryCity.id] = true;
+		for(int i = 0; i < nTasks + nCarried; i++){
+			if(!curNode.taskState.get(2*i+1) && !curNode.taskState.get(2*i)){ // 0 0 : WAITING
+				mst.isCityAlive[taskList[i].pickupCity.id] = true;
+				mst.isCityAlive[taskList[i].deliveryCity.id] = true;
 				futureCost = Math.max(futureCost, 
-						costPerKm*(taskList[i-1].pathLength()+
-								cityList.get(curNode.state[0]).distanceTo(taskList[i-1].pickupCity)));
-			}else if(curNode.state[i] == PICKEDUP){
-				mst.isCityAlive[taskList[i-1].deliveryCity.id] = true;
+						costPerKm*(taskList[i].pathLength()+
+								cityList.get(curNode.curCityId).distanceTo(taskList[i].pickupCity)));
+			}else if(!curNode.taskState.get(2*i+1) && curNode.taskState.get(2*i)){ // 0 1 : PICKEDUP
+				mst.isCityAlive[taskList[i].deliveryCity.id] = true;
 				futureCost = Math.max(futureCost, 
-						costPerKm*cityList.get(curNode.state[0]).distanceTo(taskList[i-1].deliveryCity));
+						costPerKm*cityList.get(curNode.curCityId).distanceTo(taskList[i].deliveryCity));
 			}
 		}
 		if (heuristic != Heuristic.BASIC) {
@@ -431,8 +434,8 @@ public class DeliberativeTemplate implements DeliberativeBehavior {
 			while (diaId < diameterList.size()) {
 				if (mst.isCityAlive[diameterList.get(diaId).x] && mst.isCityAlive[diameterList.get(diaId).y]) {
 					double diaCost = diameterList.get(diaId).distance
-							+ Math.min(cityList.get(diameterList.get(diaId).x).distanceTo(cityList.get(curNode.state[0])),
-									cityList.get(diameterList.get(diaId).y).distanceTo(cityList.get(curNode.state[0])));
+							+ Math.min(cityList.get(diameterList.get(diaId).x).distanceTo(cityList.get(curNode.curCityId)),
+									cityList.get(diameterList.get(diaId).y).distanceTo(cityList.get(curNode.curCityId)));
 					diaCost = costPerKm * diaCost;
 					futureCost = Math.max(futureCost, diaCost);
 					break;
@@ -443,7 +446,7 @@ public class DeliberativeTemplate implements DeliberativeBehavior {
 		}
 		
 		if (heuristic == Heuristic.MST) {
-			mst.isCityAlive[curNode.state[0]] = true;
+			mst.isCityAlive[curNode.curCityId] = true;
 			futureCost = Math.max(futureCost, costPerKm * computeMSTLength(mst));
 		}
 		
@@ -503,32 +506,31 @@ public class DeliberativeTemplate implements DeliberativeBehavior {
 	private List<Node> findAllSuccessors(Node curNode){
 		List<Node> sucs = new ArrayList<Node>();
 		int curLoad = 0;
-		int[] curState = curNode.state;
-		for(int i = 1; i < curState.length; i++)
-			if(curState[i] == PICKEDUP)
-				curLoad += taskList[i-1].weight;
-		for(int i = 1; i < curState.length; i++){
-			if(curState[i] == WAITING && taskList[i-1].weight+curLoad <= capacity){
-				int[] newState = new int[curState.length];
-				System.arraycopy(curState, 0, newState, 0, curState.length);
-				newState[i] = PICKEDUP;
-				newState[0] = taskList[i-1].pickupCity.id;
+		BitSet curState = curNode.taskState;
+		for(int i = 0; i < nTasks + nCarried; i++)
+			if(!curState.get(2*i+1) && curState.get(2*i))	// 0 1 : PICKEDUP -> to compute current load
+				curLoad += taskList[i].weight;
+		for(int i = 0; i < nTasks + nCarried; i++){
+			if(!curState.get(2*i+1) && !curState.get(2*i)	// 0 0 : WAITING 
+					&& taskList[i].weight+curLoad <= capacity){ // and remaining capacity is enough
+				BitSet newState = (BitSet) curState.clone();
+				newState.set(2*i); // set task i as PICKEDUP
+				int newCityId = taskList[i].pickupCity.id;
 				double pastCost = curNode.stateInfo.pastCost
-						+ this.costPerKm* this.cityList.get(curState[0]).distanceTo(taskList[i-1].pickupCity);
-				Node suc = new Node(newState, 
-						new StateInfo(curState[0], i, pastCost, pastCost, curNode.stateInfo.curDiaId));
+						+ this.costPerKm* this.cityList.get(curNode.curCityId).distanceTo(taskList[i].pickupCity);
+				Node suc = new Node(newCityId, newState, 
+						new StateInfo(curNode.curCityId, i, pastCost, pastCost, curNode.stateInfo.curDiaId));
 				if (algorithm == Algorithm.ASTAR)
 					computeFutureCost(suc);
 				sucs.add(suc);
-			}else if(curState[i] == PICKEDUP){
-				int[] newState = new int[curState.length];
-				System.arraycopy(curState, 0, newState, 0, curState.length);
-				newState[i] = DELIVERED;
-				newState[0] = taskList[i-1].deliveryCity.id;
+			}else if(!curState.get(2*i+1) && curState.get(2*i)){	// 0 1 : PICKEDUP
+				BitSet newState = (BitSet) curState.clone();
+				newState.set(2*i + 1); // set task i as DELIVERED
+				int newCityId = taskList[i].deliveryCity.id;
 				double pastCost = curNode.stateInfo.pastCost 
-						+ this.costPerKm* this.cityList.get(curState[0]).distanceTo(taskList[i-1].deliveryCity);
-				Node suc = new Node(newState, 
-						new StateInfo(curState[0], i, pastCost, pastCost, curNode.stateInfo.curDiaId));
+						+ this.costPerKm* this.cityList.get(curNode.curCityId).distanceTo(taskList[i].deliveryCity);
+				Node suc = new Node(newCityId, newState, 
+						new StateInfo(curNode.curCityId, i, pastCost, pastCost, curNode.stateInfo.curDiaId));
 				if (algorithm == Algorithm.ASTAR)
 					computeFutureCost(suc);
 				sucs.add(suc);
@@ -537,52 +539,41 @@ public class DeliberativeTemplate implements DeliberativeBehavior {
 		return sucs;
 	}
 	
-	//after achieving goal, traceback all actions and append them to plan
+	//after achieving goal, trace-back all actions and append them to plan
 	private void appendAllActions(Plan plan, Node finalStateNode, HashMap<Node, StateInfo>visited){
+		//test
+		//testPrint(visited);
+		
 		List<Action> actionList = new ArrayList<Action>();
-		int[] curState = new int[finalStateNode.state.length];
-		System.arraycopy(finalStateNode.state, 0, curState, 0, curState.length);
-		Node curNode = new Node(curState, finalStateNode.stateInfo);
-		while(!isInitState(curNode.state)){
+		BitSet curState = (BitSet) finalStateNode.taskState.clone();
+		Node curNode = new Node(finalStateNode.curCityId, curState, finalStateNode.stateInfo);
+		while(!initState.equals(curNode.taskState)){
 			int idx = curNode.stateInfo.targetTaskIndex;
-			City curCity = cityList.get(curState[0]);
+			City curCity = cityList.get(curNode.curCityId);
 			City preCity = cityList.get(curNode.stateInfo.preCityID);
-			assert(curState[idx]>0);
-			if(curState[idx] == DELIVERED)
-				actionList.add(0, new Delivery(taskList[idx-1]));
-			else
-				actionList.add(0, new Pickup(taskList[idx-1]));
-			curState[idx]--;
+			assert(curState.get(idx*2) || curState.get(idx*2 + 1));
+			if(curState.get(idx*2+1) && curState.get(idx*2)){  // if task idx is DELIVERED
+				actionList.add(0, new Delivery(taskList[idx]));
+				curState.set(idx*2+1, false);
+			}
+			else {	// task idx is PICKEDUP
+				actionList.add(0, new Pickup(taskList[idx]));
+				curState.set(idx*2, false);
+			}
 			if(!preCity.equals(curCity)){
 				actionList.add(0, new Move(curCity));
 				for(City city: curCity.pathTo(preCity))
 					actionList.add(0, new Move(city));
 				actionList.remove(0);
 			}
-			curState[0] = curNode.stateInfo.preCityID;
+			curNode.curCityId = curNode.stateInfo.preCityID;
 			curNode.stateInfo = visited.get(curNode);
+			if (curNode.stateInfo == null) {
+				int aaaa = 0;
+			}
 		}
 		for(Action act : actionList)
 			plan.append(act);
-	}
-	
-	//check whether state is initial state
-	private boolean isInitState(int[] state){
-		for(int i = 1; i <= nTasks; i++)
-			if(state[i] != WAITING)
-				return false;
-		for(int i = 0; i < nCarried; i++)
-			if(state[i+nTasks+1]!=PICKEDUP)
-				return false;
-		return true;
-	}
-	
-	//check whether state is goalstate
-	private boolean isGoalState(int[] state){
-		for(int i = 1; i < state.length; i++)
-			if(state[i] != DELIVERED)
-				return false;
-		return true;
 	}
 	
 	//default code provided by TAs==================================
@@ -616,5 +607,27 @@ public class DeliberativeTemplate implements DeliberativeBehavior {
 			// you will need to consider the carriedTasks when the next
 			// plan is computed.
 		}
+	}
+	
+	private void testPrint(HashMap<Node, StateInfo> visited) {
+		for(Map.Entry<Node, StateInfo> entry : visited.entrySet()) {
+			  Node key = entry.getKey();
+			  StateInfo value = entry.getValue();
+			  System.out.print(key.curCityId + " ");
+			  for (int i = 0; i < nTasks + nCarried; ++i) {
+				  boolean b1 = key.taskState.get(2*i+1);
+				  boolean b0 = key.taskState.get(2*i);
+				  if (b1 && b0) 
+					  System.out.print('D' + " ");
+				  else if (!b1 && b0)
+					  System.out.print('P' + " ");
+				  else if (!b1 && !b0)
+					  System.out.print('W' + " ");
+				  else 
+					  System.out.print("error!");
+			  }
+			  System.out.print(": " + value.toString());
+			  System.out.println();
+			}
 	}
 }
