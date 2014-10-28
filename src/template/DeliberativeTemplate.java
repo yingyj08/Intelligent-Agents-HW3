@@ -236,7 +236,7 @@ public class DeliberativeTemplate implements DeliberativeBehavior {
 		}
 		//priting running time
 		System.out.print("Time for computation: ");
-		System.out.println(System.currentTimeMillis()-start);
+		System.out.println(System.currentTimeMillis()-start + "ms");
 		return plan;
 	}
 	
@@ -330,24 +330,15 @@ public class DeliberativeTemplate implements DeliberativeBehavior {
 			if ((c2 & 131071) == 0) {
 				System.out.print("   current cost: " + curNode.stateInfo.cost);
 				System.out.println("  loop count: " + c2);
-				if (nTasks > 15 && (c2 >> 17) > 10)
-					System.gc();
+//				if (nTasks > 15 && (c2 >> 17) > 10)
+//					System.gc();
 			}
 			c++;
 		}
-		
-		
-		System.out.println("pending size: " + pending.size());
-		System.out.println("visited size: " + visited.size());
+		System.out.println();
+		System.out.println("DONE!");
 		System.out.println("states searched: " + c);
-		System.out.println("loops finished: " + c2);
 		//System.out.println(mstTable.size());
-//		HashMap<Node, StateInfo> test = new HashMap<Node, StateInfo>();
-//		for (Node n : pending) {
-//			if (!visited.containsKey(n))
-//				test.put(n, n.stateInfo);
-//		}
-//		System.out.println(test.size());
 		
 		if(finalStateNode == null)
 			throw new Exception("Mission impossible!");
@@ -402,10 +393,9 @@ public class DeliberativeTemplate implements DeliberativeBehavior {
 			}
 			c++;
 		}	
-		System.out.println("pending size: " + pending.size());
+		System.out.println();
+		System.out.println("DONE!");
 		System.out.println("states searched: " + c);
-		System.out.println("loops finished: " + c2);
-		System.out.println("visited size: " + visited.size());
 		
 		if(finalStateNode == null)
 			throw new Exception("Mission impossible!");
@@ -507,7 +497,7 @@ public class DeliberativeTemplate implements DeliberativeBehavior {
 		List<Node> sucs = new ArrayList<Node>();
 		int curLoad = 0;
 		BitSet curState = curNode.taskState;
-		for(int i = 0; i < nTasks + nCarried; i++)
+		for(int i = 0; i < nTasks + nCarried; i++) 
 			if(!curState.get(2*i+1) && curState.get(2*i))	// 0 1 : PICKEDUP -> to compute current load
 				curLoad += taskList[i].weight;
 		for(int i = 0; i < nTasks + nCarried; i++){
@@ -533,6 +523,11 @@ public class DeliberativeTemplate implements DeliberativeBehavior {
 						new StateInfo(curNode.curCityId, i, pastCost, pastCost, curNode.stateInfo.curDiaId));
 				if (algorithm == Algorithm.ASTAR)
 					computeFutureCost(suc);
+				if (suc.curCityId == curNode.curCityId) {
+					sucs.clear();
+					sucs.add(suc);
+					return sucs;
+				}
 				sucs.add(suc);
 			}
 		}
