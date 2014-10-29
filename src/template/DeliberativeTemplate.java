@@ -37,7 +37,7 @@ import logist.plan.Action.Pickup;
 public class DeliberativeTemplate implements DeliberativeBehavior {
 
 	enum Algorithm { BFS, ASTAR, NAIVE }
-	enum Heuristic { BASIC, DIAMETER, MST }
+	enum Heuristic { BASIC, DIAMETER, MST, ALL }
 	
 	private static final int WAITING = 0;
 	private static final int PICKEDUP = 1;
@@ -419,7 +419,7 @@ public class DeliberativeTemplate implements DeliberativeBehavior {
 						costPerKm*cityList.get(curNode.curCityId).distanceTo(taskList[i].deliveryCity));
 			}
 		}
-		if (heuristic != Heuristic.BASIC) {
+		if (heuristic == Heuristic.ALL || heuristic == Heuristic.DIAMETER) {
 			int diaId = curNode.stateInfo.curDiaId;
 			while (diaId < diameterList.size()) {
 				if (mst.isCityAlive[diameterList.get(diaId).x] && mst.isCityAlive[diameterList.get(diaId).y]) {
@@ -435,7 +435,7 @@ public class DeliberativeTemplate implements DeliberativeBehavior {
 			curNode.stateInfo.curDiaId = diaId;
 		}
 		
-		if (heuristic == Heuristic.MST) {
+		if (heuristic == Heuristic.ALL || heuristic == Heuristic.MST) {
 			mst.isCityAlive[curNode.curCityId] = true;
 			futureCost = Math.max(futureCost, costPerKm * computeMSTLength(mst));
 		}
